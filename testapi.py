@@ -1,14 +1,18 @@
-from flask import Flask, redirect, url_for, request
+from flask import Flask, redirect, url_for, request, jsonify
 import json
 import sqlite3
 import os
+from operator import itemgetter
 
 app = Flask(__name__)
 app.secret_key = os.urandom(32)
 
 
-user_table = sqlite3.connect('user_table.db')
-user_crsr = user_table.cursor()
+#user_table = sqlite3.connect('user_table.db')
+#user_crsr = user_table.cursor()
+
+USER_TABLE = 'user_table.db'
+COMPANY_TABLE = 'company_data.db'
 
 
 def getData(db_name,company_name,mode):
@@ -40,7 +44,35 @@ def getData(db_name,company_name,mode):
 
       payload[i[1]] = leanings
 
-   return json.dumps(payload)
+   db_connection.close()
+   return payload
+
+def getCompanyList(db_name, user_name):
+    db_connection = sqlite3.connect(USER_TABLE)
+    db_crsr = db_connection.cursor()
+    db_crsr.execute('SELECT * FROM "users" WHERE username = "' + user_name + '";')
+    user_data = list(db_crsr.fetchone())[2:]
+    db_connection.close()
+
+    company_data = getData(COMPANY_TABLE, 0, "list")
+
+    company_to_percent = {}
+    for company in company_data:
+        company_leanings = company_data[company]
+
+        multiplied = []
+        company_leanings_list = []
+        for i in company_leanings:
+            company_leanings_list.append(company_leanings[i])
+        multiplied = [a*b for a,b in zip(company_leanings_list, user_data)]
+
+        #this is sus, can get negative numbers
+        percentage = abs(((sum(multiplied) / len(company_leanings)) * 100))
+
+        company_to_percent[company] = percentage
+
+    sorted_data = sorted(company_to_percent.items(), key=itemgetter(1), reverse=True)
+    return jsonify(sorted_data)
 
 #ENDPOINTS
 
@@ -52,7 +84,7 @@ def companySearch():
 
       company_name = request.form['company_name']
 
-      return getData('company_data.db', company_name,"single")
+      return json.dumps(getData('company_data.db', company_name,"single"))
 
    else:
 
@@ -63,12 +95,11 @@ def companySearch():
 #                                                               [ { "name":"apple", "leanings" : { "issue1": "support"} ... } .... ]
 @app.route('/users/companylist', methods=['GET', 'POST'])
 def companyList():
-
    if request.method == 'POST':
 
-      company_name = request.form['user_name'] #
+      user_name = request.form['user_name']
 
-      return getData('company_data.db', company_name,"list")
+      return getCompanyList('user_table.db', user_name)
 
    else:
 
@@ -78,7 +109,7 @@ def companyList():
 
 
 # /users/createaccount/<username>/<password>/: -> takes in username, email, password, survey answers and creates user on the backend
-@app.route('/users/createaccount', methods=['GET', 'POST'])
+@app.route('/users/createAccount', methods=['GET', 'POST'])
 def createAccount(user_name,password):
 
     #switch to json http get/post
