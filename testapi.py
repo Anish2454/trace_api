@@ -97,7 +97,7 @@ def companySearch():
 def companyList():
    if request.method == 'POST':
 
-      user_name = request.form['user_name']
+      user_name = request.form['username']
 
       return getCompanyList('user_table.db', user_name)
 
@@ -105,8 +105,28 @@ def companyList():
 
       return "err"
 
+def check_account_exist(username):
+    db_connection = sqlite3.connect(USER_TABLE)
+    db_crsr = db_connection.cursor()
+    command = "SELECT username FROM users WHERE username = ?"
+    usernames = db_crsr.execute(command, (username,))
+    for list_username in usernames:
+        return list_username != None
+    db_connection.close()
+    return False
 
-
+@app.route('/users/auth', methods=['GET', 'POST'])
+def auth():
+    username = request.form['username']
+    password = request.form['password']
+    if (not check_account_exist(username)):
+        return jsonify(False)
+    db_connection = sqlite3.connect(USER_TABLE)
+    db_crsr = db_connection.cursor()
+    command = "SELECT password FROM users WHERE username = ? "
+    passdb = db_crsr.execute(command, (username, )).fetchone()
+    db_connection.close()
+    return jsonify(password == passdb[0])
 
 # /users/createaccount/<username>/<password>/: -> takes in username, email, password, survey answers and creates user on the backend
 @app.route('/users/createAccount', methods=['GET', 'POST'])
