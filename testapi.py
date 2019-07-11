@@ -47,6 +47,7 @@ def getData(db_name,company_name,mode):
    db_connection.close()
    return payload
 
+#Helper function for matching company preferences to user
 def getCompanyList(db_name, user_name):
     db_connection = sqlite3.connect(USER_TABLE)
     db_crsr = db_connection.cursor()
@@ -71,12 +72,29 @@ def getCompanyList(db_name, user_name):
 
         company_to_percent[company] = percentage
 
-    sorted_data = sorted(company_to_percent.items(), key=itemgetter(1), reverse=True)
+    sorted_data = sorted(company_to_percent.items(), key=itemgetter(1), reverse=True)[:9]
     return jsonify(sorted_data)
 
 #ENDPOINTS
 
+'''
 #COMPANY SEARCH
+#Endpoint: /companies
+#Takes in 'company_name'
+#Example Return:
+   {"ADP":
+        {
+         "lgbtq_support": 0.0,
+         "veteran_support": 1.0,
+         "abortion": 1.0,
+         "made_in_usa": 0.0,
+         "animal_cruel": 0.0,
+         "sustainable": 0.0,
+         "gun_control": 0.0,
+         "anti_poverty": 0.0
+         }
+    }
+'''
 @app.route('/companies', methods=['GET', 'POST'])
 def companySearch():
 
@@ -91,9 +109,51 @@ def companySearch():
       return "err"
 
 
-# USERS /users/<user name>/companies/: -> returns -list of companies containing name, leanings percentage, logo link
-#                                                               [ { "name":"apple", "leanings" : { "issue1": "support"} ... } .... ]
-@app.route('/users/companylist', methods=['GET', 'POST'])
+'''
+#Returns a list of top 10 companies and perecntages of how much they match to you
+#Endpoint: /users/companyList
+#Takes in 'username'
+#Example Return:
+[
+  [
+    "Johnson & Johnson",
+    37.5
+  ],
+  [
+    "Amazon",
+    37.5
+  ],
+  [
+    "Morgan Stanley",
+    37.5
+  ],
+  [
+    "Boeing",
+    37.5
+  ],
+  [
+    "Accenture",
+    37.5
+  ],
+  [
+    "IBM",
+    25.0
+  ],
+  [
+    "Cisco Systems, Inc.",
+    25.0
+  ],
+  [
+    "Kaiser Permanente",
+    25.0
+  ],
+  [
+    "General Motors",
+    25.0
+  ]
+]
+'''
+@app.route('/users/companyList', methods=['GET', 'POST'])
 def companyList():
    if request.method == 'POST':
 
@@ -105,6 +165,7 @@ def companyList():
 
       return "err"
 
+#No endpoint, just checks if a username exists (helper)
 def check_account_exist(username):
     db_connection = sqlite3.connect(USER_TABLE)
     db_crsr = db_connection.cursor()
@@ -115,6 +176,11 @@ def check_account_exist(username):
     db_connection.close()
     return False
 
+'''
+Endpoint: /users/auth
+Takes in 'username' and 'password'
+Returns either True or False
+'''
 @app.route('/users/auth', methods=['GET', 'POST'])
 def auth():
     username = request.form['username']
@@ -128,7 +194,6 @@ def auth():
     db_connection.close()
     return jsonify(password == passdb[0])
 
-# /users/createaccount/<username>/<password>/: -> takes in username, email, password, survey answers and creates user on the backend
 @app.route('/users/createAccount', methods=['GET', 'POST'])
 def createAccount(user_name,password):
 
@@ -136,16 +201,6 @@ def createAccount(user_name,password):
     #success fail message =
 
     return "success fail message"
-
-
-
-# /users/<username>/friends/: -> returns list of friends and their leanings
-@app.route('/users/<user_name>/friends')
-def friends(user_name):
-
-    #friends_table_data =  function to gather friends data from table
-
-    return "friends_table_data"
 
 if __name__ == "__main__":
    app.debug = True
