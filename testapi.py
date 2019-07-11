@@ -47,14 +47,17 @@ def getData(db_name,company_name,mode):
    db_connection.close()
    return payload
 
-#Helper function for matching company preferences to user
-def getCompanyList(db_name, user_name):
+def getUserPref(user_name):
     db_connection = sqlite3.connect(USER_TABLE)
     db_crsr = db_connection.cursor()
     db_crsr.execute('SELECT * FROM "users" WHERE username = "' + user_name + '";')
     user_data = list(db_crsr.fetchone())[2:]
     db_connection.close()
+    return user_data
 
+#Helper function for matching company preferences to user
+def getCompanyList(db_name, user_name):
+    user_data = getUserPref()
     company_data = getData(COMPANY_TABLE, 0, "list")
 
     company_to_percent = {}
@@ -75,13 +78,24 @@ def getCompanyList(db_name, user_name):
     sorted_data = sorted(company_to_percent.items(), key=itemgetter(1), reverse=True)[:9]
     return jsonify(sorted_data)
 
+#No endpoint, just checks if a username exists (helper)
+def check_account_exist(username):
+    db_connection = sqlite3.connect(USER_TABLE)
+    db_crsr = db_connection.cursor()
+    command = "SELECT username FROM users WHERE username = ?"
+    usernames = db_crsr.execute(command, (username,))
+    for list_username in usernames:
+        return list_username != None
+    db_connection.close()
+    return False
+
 #ENDPOINTS
 
 '''
 #COMPANY SEARCH
-#Endpoint: /companies
-#Takes in 'company_name'
-#Example Return:
+#Endpoint: /companies/<company>/
+#Example:
+   /companies/ADP:
    {"ADP":
         {
          "lgbtq_support": 0.0,
@@ -95,18 +109,9 @@ def getCompanyList(db_name, user_name):
          }
     }
 '''
-@app.route('/companies', methods=['GET', 'POST'])
-def companySearch():
-
-   if request.method == 'POST':
-
-      company_name = request.form['company_name']
-
+@app.route('/companies/<company>', methods=['GET'])
+def companySearch(company):
       return json.dumps(getData('company_data.db', company_name,"single"))
-
-   else:
-
-      return "err"
 
 
 '''
@@ -154,7 +159,7 @@ def companySearch():
 ]
 '''
 @app.route('/users/companyList', methods=['GET', 'POST'])
-def companyList():
+def companyList(username):
    if request.method == 'POST':
 
       user_name = request.form['username']
@@ -165,34 +170,26 @@ def companyList():
 
       return "err"
 
-#No endpoint, just checks if a username exists (helper)
-def check_account_exist(username):
-    db_connection = sqlite3.connect(USER_TABLE)
-    db_crsr = db_connection.cursor()
-    command = "SELECT username FROM users WHERE username = ?"
-    usernames = db_crsr.execute(command, (username,))
-    for list_username in usernames:
-        return list_username != None
-    db_connection.close()
-    return False
-
 '''
 Endpoint: /users/auth
 Takes in 'username' and 'password'
 Returns either True or False
 '''
-@app.route('/users/auth', methods=['GET', 'POST'])
-def auth():
-    username = request.form['username']
-    password = request.form['password']
-    if (not check_account_exist(username)):
-        return jsonify(False)
-    db_connection = sqlite3.connect(USER_TABLE)
-    db_crsr = db_connection.cursor()
-    command = "SELECT password FROM users WHERE username = ? "
-    passdb = db_crsr.execute(command, (username, )).fetchone()
-    db_connection.close()
-    return jsonify(password == passdb[0])
+@app.route('/users/<username>', methods=['GET', 'POST'])
+def users(username):
+    if request.method == "GET":
+        return getCompanyList('user_table.db', username)
+    if request.method == "POST":
+        if (not check_account_exist(username)):
+            return jsonify(False)
+        db_connection = sqlite3.connect(USER_TABLE)
+        db_crsr = db_connection.cursor()
+        command = "SELECT password FROM users WHERE username = ? "
+        passdb = db_crsr.execute(command, (username, )).fetchone()
+        db_connection.close()
+        return jsonify(password == passdb[0])
+
+
 
 @app.route('/users/createAccount', methods=['GET', 'POST'])
 def createAccount(user_name,password):
