@@ -1,18 +1,36 @@
+#!/usr/local/bin/python3
 from flask import Flask, redirect, url_for, request, jsonify
 import json
 import sqlite3
 import os
 from operator import itemgetter
+from flask import render_template, flash, redirect
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, BooleanField, SubmitField
+from wtforms.validators import DataRequired
+
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    remember_me = BooleanField('Remember Me')
+    submit = SubmitField('Sign In')
+    
+class CreateAccountForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    email = StringField('Email', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    passwordConfirm = PasswordField('Confirm Password', validators=[DataRequired()])
+    submit = SubmitField('Register')
 
 app = Flask(__name__)
 app.secret_key = os.urandom(32)
-
 
 #user_table = sqlite3.connect('user_table.db')
 #user_crsr = user_table.cursor()
 
 USER_TABLE = 'user_table.db'
 COMPANY_TABLE = 'company_data.db'
+LOGGEDIN = {"anish"}
 
 
 def getData(db_name,company_name,mode):
@@ -57,6 +75,7 @@ def getUserPref(user_name):
 
 #Helper function for matching company preferences to user
 def getCompanyList(user_name):
+  if checkLogin(user_name) == True:
     user_data = getUserPref(user_name)
     company_data = getData(COMPANY_TABLE, 0, "list")
 
@@ -77,6 +96,8 @@ def getCompanyList(user_name):
 
     sorted_data = sorted(company_to_percent.items(), key=itemgetter(1), reverse=True)[:9]
     return jsonify(sorted_data)
+  else:
+    return "NOT LOGGED IN"
 
 #No endpoint, just checks if a username exists (helper)
 def check_account_exist(username):
@@ -90,16 +111,17 @@ def check_account_exist(username):
     return False
 
 def create_account(user_name, password):
-    print user_name
-    print password
-    db_connection = sqlite3.connect(USER_TABLE)
-    db_crsr = db_connection.cursor()
-    command = "INSERT INTO 'users' (username, password) VALUES "+"('" + user_name + "'" + ",'" + password + "');"
-    print command
-    db_crsr.execute(command)
-    db_connection.commit()
-    db_connection.close()
-    return True
+    if check_account_exist(user_name) == False:
+      db_connection = sqlite3.connect(USER_TABLE)
+      db_crsr = db_connection.cursor()
+      command = "INSERT INTO 'users' (username, password) VALUES "+"('" + user_name + "'" + ",'" + password + "');"
+      db_crsr.execute(command)
+      db_connection.commit()
+      db_connection.close()
+      LOGGEDIN.add(user_name)
+      return True
+    else:
+      return False
 
 def addData(username, abortion,anti_poverty,made_in_us,lgbtq_support,sustainable,animal_cruel, veteran_support, gun_control):
    db_name = "'users'"
@@ -115,6 +137,13 @@ def addData(username, abortion,anti_poverty,made_in_us,lgbtq_support,sustainable
    db_connection.commit()
    db_connection.close()
    return True
+
+def checkLogin(username):
+  if username in LOGGEDIN:
+    return True
+  else:
+    return False
+
 
 #ENDPOINTS
 
@@ -138,8 +167,10 @@ def addData(username, abortion,anti_poverty,made_in_us,lgbtq_support,sustainable
 '''
 @app.route('/companies/<company>', methods=['GET'])
 def companySearch(company):
-      return json.dumps(getData('company_data.db', company,"single"))
-
+    #if checkLogin(username) == True:
+    return json.dumps(getData('company_data.db', company,"single"))
+    #else:
+      #return redirect(url_for(users))
 
 '''
 Endpoint: /users/<username>
@@ -192,16 +223,46 @@ For POST requests:
 def users(username):
     if request.method == "GET":
         return getCompanyList(username)
-    if request.method == "POST":
+    '''elif request.method == "POST":
         password = request.form["password"]
         if (not check_account_exist(username)):
-            return jsonify(False)
+            return redirect(url_for(createAccount))
         db_connection = sqlite3.connect(USER_TABLE)
         db_crsr = db_connection.cursor()
         command = "SELECT password FROM users WHERE username = ? "
         passdb = db_crsr.execute(command, (username, )).fetchone()
         db_connection.close()
-        return jsonify(password == passdb[0])
+        if password == passdb[0]:
+          if username not in LOGGEDIN:
+            LOGGEDIN.add(username)
+            return "LOG IN SUCCESFUL"
+          else:
+            return "ALREADY LOGGED IN"
+        else:
+          return redirect(url_for('login')) #"PASSWORD INCORRECT"
+    else:
+      return "INVALID METHOD"'''
+
+
+'''@app.route('/users/<username>/login', methods=['POST'])
+def login():
+    if request.method == 'POST':
+      user_name = request.form['username']
+      password = request.form['password']
+      if username in LOGGED_IN:
+        return redirect(url_for(users))
+      else:
+        db_connection = sqlite3.connect(USER_TABLE)
+        db_crsr = db_connection.cursor()
+        db_crsr.execute('SELECT * FROM "users" WHERE username = "' + user_name + '";')
+        user_password = list(db_crsr.fetchone())[1]
+        db_connection.close()
+        if password == user_password:
+          LOGGED_IN.add(user_name)
+          return redirect(url_for(login))
+        else:
+          return redirect(url_for(login))'''
+
 
 '''
 Endpoint: /users/<username>/preferences/
@@ -223,6 +284,7 @@ For POST requests:
 '''
 @app.route('/users/<username>/preferences', methods=['GET', 'POST'])
 def prefs(username):
+  if checkLogin(username) == True:
     if request.method == "GET":
         user_list = getUserPref(username)
         topics = ["abortion", "anti_poverty", "made_in_us",	"lgbtq_support", "sustainable",	"animal_cruel", "veteran_support", "gun_control"]
@@ -240,6 +302,8 @@ def prefs(username):
         veteran_support = request.form['veteran_support']
         gun_control = request.form['gun_control']
         return jsonify(addData(username, abortion,anti_poverty,made_in_us,lgbtq_support,sustainable,animal_cruel, veteran_support, gun_control))
+  else:
+    return redirect(url_for('login'))
 
 '''
 Endpoint: /users/createAccount
@@ -247,12 +311,63 @@ For POST requests:
     Takes in 'username' and 'password'
     Returns true or false
 '''
-@app.route('/users/createAccount', methods=['POST'])
+@app.route('/users/createAccount', methods=['GET','POST'])
 def createAccount():
-    if request.method == 'POST':
-      user_name = request.form['username']
-      password = request.form['password']
-      return jsonify(create_account(user_name,password))
+  if request.method == 'POST':
+    user_name = request.form['username']
+    password = request.form['password']
+    
+    #leaninings from survey go under here / modify create_account function insert leanings
+
+    if jsonify(create_account(user_name,password)) == False:
+      return "USER CREATED SUCCCESSFULLY"
+    else:
+      return redirect('/users/'+user_name) # usercreated redirect to user homepage
+
+  elif request.method == 'GET':
+    form = CreateAccountForm() 
+    return render_template('create.html', title='Create Account', form=form)
+  else:
+    return "INVALID METHOD"
+
+@app.route('/users/<username>/logout', methods=['POST'])
+def logout(username):
+  if request.method == 'POST':
+    if username in LOGGEDIN:
+      LOGGEDIN.remove(username)
+      return "LOGOUT SUCCESSFUL"
+    else:
+      return "USER NOT LOGGED IN"
+
+@app.route('/users/login', methods=['GET', 'POST'])
+def login():
+  if request.method == 'POST':
+    user_name = request.form['username']
+    password = request.form['password']
+    if (not check_account_exist(user_name)):
+      return redirect(url_for(createAccount))
+    db_connection = sqlite3.connect(USER_TABLE)
+    db_crsr = db_connection.cursor()
+    command = "SELECT password FROM users WHERE username = ? "
+    passdb = db_crsr.execute(command, (user_name, )).fetchone()
+    db_connection.close()
+    if password == passdb[0]:
+      if user_name not in LOGGEDIN:
+        LOGGEDIN.add(user_name)
+        return redirect('/users/'+user_name) #"LOG IN SUCCESFUL"
+      else:
+        return redirect('/users/'+user_name) # "ALREADY LOGGED-IN"
+    else:
+      return redirect(url_for('login')) #"PASSWORD INCORRECT"
+
+  elif request.method == 'GET':
+    form = LoginForm() 
+    return render_template('login.html', title='Sign In', form=form)
+
+  else:
+    return "INVALID METHOD"
+
+
 
 if __name__ == "__main__":
    app.debug = True
